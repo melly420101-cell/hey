@@ -956,55 +956,97 @@ function updateThreatMeter() {
 /* ═══ SAVE / LOAD (updated with YouTube) ═══ */
 function collectFields(){ const d={}; document.querySelectorAll('[data-key]').forEach(el=>{ d[el.dataset.key]=el.value; }); return d; }
 function restoreFields(data){ if(!data)return; document.querySelectorAll('[data-key]').forEach(el=>{ if(data[el.dataset.key]!==undefined) el.value=data[el.dataset.key]; }); }
-function buildState(){
-  return {
-    fields: collectFields(),
-    tier: currentTier,
-    emotionVals: emotionVals.slice(),
-    powerVals: powerVals.slice(),
-    dyadEmoVals: dyadEmoVals.slice(),
-    dyadPowVals: dyadPowVals.slice(),
-    factionVals: factionVals.slice(),
-    mode: currentMode,
-    ytUrl: document.getElementById('yt-url').value,
-    ytVideoId: ytVideoId,
-    ytTrackName: ytTrackName
-  };
+function buildState() {
+  const fields = collectFields();
+  const compactFields = {};
+  // Only include filled fields (non-empty strings)
+  Object.entries(fields).forEach(([key, val]) => {
+    if (val && val.trim() !== '') compactFields[key] = val;
+  });
+
+  const state = {};
+  if (Object.keys(compactFields).length) state.fields = compactFields;
+  if (currentTier !== 0) state.tier = currentTier;
+
+  // Emotion/power/dyad arrays – only store if different from default (all 3s)
+  if (!emotionVals.every(v => v === 3)) state.emotionVals = emotionVals.slice();
+  if (!powerVals.every(v => v === 3)) state.powerVals = powerVals.slice();
+  if (!dyadEmoVals.every(v => v === 3)) state.dyadEmoVals = dyadEmoVals.slice();
+  if (!dyadPowVals.every(v => v === 3)) state.dyadPowVals = dyadPowVals.slice();
+
+  // Factions – only if any non-zero
+  if (!factionVals.every(v => v === 0)) state.factionVals = factionVals.slice();
+
+  if (currentMode !== 'emotion') state.mode = currentMode;
+
+  // YouTube – only if URL is present
+  const ytUrl = document.getElementById('yt-url').value.trim();
+  if (ytUrl) {
+    state.ytUrl = ytUrl;
+    if (ytVideoId) state.ytVideoId = ytVideoId;
+    if (ytTrackName) state.ytTrackName = ytTrackName;
+  }
+
+  return state;
 }
-function restoreState(state){
-  if(!state) return;
-  restoreFields(state.fields);
-  if(state.tier) setTier(state.tier);
-  if(state.emotionVals) emotionVals = state.emotionVals;
-  if(state.powerVals) powerVals = state.powerVals;
-  if(state.dyadEmoVals) dyadEmoVals = state.dyadEmoVals;
-  if(state.dyadPowVals) dyadPowVals = state.dyadPowVals;
-  if(state.factionVals){
-    state.factionVals.forEach((v,fi)=>{
-      factionVals[fi]=v;
-      const rows=document.querySelectorAll('.faction-row');
-      if(rows[fi]){
-        rows[fi].querySelectorAll('.pip').forEach((p,idx)=>p.classList.toggle('on',idx<v));
-        const nm=rows[fi].querySelector('.faction-val'); if(nm) nm.textContent=v;
+function restoreState(state) {
+  if (!state) return;
+
+  // Restore fields (if present)
+  if (state.fields) restoreFields(state.fields);
+
+  if (state.tier !== undefined) setTier(state.tier);
+
+  // Use default arrays (all 3s) if not present
+  emotionVals = state.emotionVals ? state.emotionVals.slice() : [3,3,3,3,3,3,3,3];
+  powerVals = state.powerVals ? state.powerVals.slice() : [3,3,3,3,3,3,3,3];
+  dyadEmoVals = state.dyadEmoVals ? state.dyadEmoVals.slice() : [3,3,3,3,3,3,3,3];
+  dyadPowVals = state.dyadPowVals ? state.dyadPowVals.slice() : [3,3,3,3,3,3,3,3];
+
+  // Factions default to zeros
+  if (state.factionVals) {
+    state.factionVals.forEach((v, fi) => {
+      factionVals[fi] = v;
+      const rows = document.querySelectorAll('.faction-row');
+      if (rows[fi]) {
+        rows[fi].querySelectorAll('.pip').forEach((p, idx) => p.classList.toggle('on', idx < v));
+        const nm = rows[fi].querySelector('.faction-val');
+        if (nm) nm.textContent = v;
       }
     });
+  } else {
+    // Reset factions to zero if not present
+    factionVals.fill(0);
+    document.querySelectorAll('.faction-row').forEach((row, fi) => {
+      row.querySelectorAll('.pip').forEach(p => p.classList.remove('on'));
+      const nm = row.querySelector('.faction-val');
+      if (nm) nm.textContent = '0';
+    });
   }
-  if(state.mode) currentMode = state.mode;
+
+  currentMode = state.mode || 'emotion';
+
   // Restore YouTube
-  if(state.ytUrl) {
+  if (state.ytUrl) {
     document.getElementById('yt-url').value = state.ytUrl;
-    if(state.ytVideoId) {
+    if (state.ytVideoId) {
       ytVideoId = state.ytVideoId;
       ytTrackName = state.ytTrackName || 'Track loaded';
-      setTimeout(() => { loadYT(); }, 100);
+      setTimeout(() => loadYT(), 100);
     }
+  } else {
+    clearYT(); // ensure clean state
   }
-  ['emotion','power','dyad-e','dyad-p'].forEach(m=>{
-    const el=document.getElementById('tab-'+m);
-    if(el) el.classList.toggle('active', m===currentMode);
+
+  // Update UI
+  ['emotion','power','dyad-e','dyad-p'].forEach(m => {
+    const el = document.getElementById('tab-'+m);
+    if (el) el.classList.toggle('active', m === currentMode);
   });
-  updateThreatMeter();   // <-- ADDED: update after loading saved state
-  renderCircuit(); buildSliders();
+
+  updateThreatMeter();
+  renderCircuit();
+  buildSliders();
 }
 function saveHTML(){
   const state = buildState();
